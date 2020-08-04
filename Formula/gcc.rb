@@ -5,6 +5,7 @@ class Gcc < Formula
   mirror "https://ftpmirror.gnu.org/gcc/gcc-10.2.0/gcc-10.2.0.tar.xz"
   sha256 "b8dd4368bb9c7f0b98188317ee0254dd8cc99d1e3a18d0ff146c855fe16c1d8c"
   license "GPL-3.0"
+  revision 1
   head "https://gcc.gnu.org/git/gcc.git"
 
   bottle do
@@ -46,7 +47,7 @@ class Gcc < Formula
     #  - Ada, which requires a pre-existing GCC Ada compiler to bootstrap
     #  - Go, currently not supported on macOS
     #  - BRIG
-    languages = %w[c c++ objc obj-c++ fortran]
+    languages = %w[c c++ objc obj-c++ fortran jit]
 
     osmajor = `uname -r`.split(".").first
     pkgversion = "Homebrew GCC #{pkg_version} #{build.used_options*" "}".strip
@@ -66,6 +67,7 @@ class Gcc < Formula
       --with-system-zlib
       --with-pkgversion=#{pkgversion}
       --with-bugurl=https://github.com/Homebrew/homebrew-core/issues
+      --enable-host-shared
     ]
 
     # Xcode 10 dropped 32-bit support
