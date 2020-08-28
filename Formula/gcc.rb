@@ -39,16 +39,7 @@ class Gcc < Formula
     end
   end
 
-  def install
-    # GCC will suffer build errors if forced to use a particular linker.
-    ENV.delete "LD"
-
-    # We avoiding building:
-    #  - Ada, which requires a pre-existing GCC Ada compiler to bootstrap
-    #  - Go, currently not supported on macOS
-    #  - BRIG
-    languages = %w[c c++ objc obj-c++ fortran jit]
-
+  def prepare_args(languages)
     osmajor = `uname -r`.split(".").first
     pkgversion = "Homebrew GCC #{pkg_version} #{build.used_options*" "}".strip
 
@@ -67,8 +58,9 @@ class Gcc < Formula
       --with-system-zlib
       --with-pkgversion=#{pkgversion}
       --with-bugurl=https://github.com/Homebrew/homebrew-core/issues
-      --enable-host-shared
     ]
+
+    args << "--enable-host-shared" if languages.include? "jit"
 
     # Xcode 10 dropped 32-bit support
     args << "--disable-multilib" if DevelopmentTools.clang_build_version >= 1000
@@ -83,20 +75,45 @@ class Gcc < Formula
     # Avoid reference to sed shim
     args << "SED=/usr/bin/sed"
 
+    args
+  end
+
+  def make(languages)
+    args = prepare_args languages
+
+    system "../configure", *args
+
+    # Use -headerpad_max_install_names in the build,
+    # otherwise updated load commands won't fit in the Mach-O header.
+    # This is needed because `gcc` avoids the superenv shim.
+    system "make", "BOOT_LDFLAGS=-Wl,-headerpad_max_install_names"
+
+    system "make", "install"
+  end
+
+  def install
+    # GCC will suffer build errors if forced to use a particular linker.
+    ENV.delete "LD"
+
     # Ensure correct install names when linking against libgcc_s;
     # see discussion in https://github.com/Homebrew/legacy-homebrew/pull/34303
     inreplace "libgcc/config/t-slibgcc-darwin", "@shlib_slibdir@", "#{HOMEBREW_PREFIX}/lib/gcc/#{version_suffix}"
 
-    mkdir "build" do
-      system "../configure", *args
-
-      # Use -headerpad_max_install_names in the build,
-      # otherwise updated load commands won't fit in the Mach-O header.
-      # This is needed because `gcc` avoids the superenv shim.
-      system "make", "BOOT_LDFLAGS=-Wl,-headerpad_max_install_names"
-      system "make", "install"
-
+    mkdir "build-all" do
+      # We avoiding building:
+      #  - Ada, which requires a pre-existing GCC Ada compiler to bootstrap
+      #  - Go, currently not supported on macOS
+      #  - BRIG
+      make %w[c c++ objc obj-c++ fortran]
       bin.install_symlink bin/"gfortran-#{version_suffix}" => "gfortran"
+    end
+
+    mkdir "build-jit" do
+      # JIT support. We build the second time to avoid performance degradation
+      # introduced by --enable-host-shared argument. See
+      # https://gcc.gnu.org/onlinedocs/gcc-10.2.0/jit/internals/index.html#packaging-notes
+      # for more information
+      make %w[jit]
     end
 
     # Handle conflicts between GCC formulae and avoid interfering
